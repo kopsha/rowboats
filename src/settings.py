@@ -32,10 +32,3 @@ class SafeSettings(ABC):
         """Build settings from previously validated values."""
         pass
 
-
-class UseSettings:
-    """Mixin that stores settings during client construction."""
-
-    def __init__(self, settings: SafeSettings, *args, **kwargs):
-        self.settings = settings
-        super().__init__(*args, **kwargs)

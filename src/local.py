@@ -22,6 +22,10 @@ class LocalSettings(SafeSettings):
 
 
 class CsvSource(TableSource):
+    def __init__(self, settings: LocalSettings) -> None:
+        super().__init__()
+        self.settings = settings
+
     def __enter__(self):
         self.stream = self.settings.source_path.open(encoding="utf-8", newline="")
         try:
@@ -47,6 +51,10 @@ class FileUploader(ChunkUploader):
     """Replace the destination only after the entire export succeeds."""
 
     UPLOAD_THRESHOLD = 64 * 1024
+
+    def __init__(self, settings: LocalSettings) -> None:
+        super().__init__()
+        self.settings = settings
 
     def __enter__(self):
         self.stream = NamedTemporaryFile(

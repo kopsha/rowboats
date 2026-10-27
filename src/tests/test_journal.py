@@ -9,12 +9,13 @@ from journal import JsonFormatter
 
 @pytest.fixture
 def formatter():
-    return JsonFormatter("retail-media-feeds", banner="example-banner", environment="production")
+    return JsonFormatter("retail-media-feeds", environment="production")
 
 
 def test_formats_record_as_one_json_line(formatter):
-    record = logging.LogRecord("feeds.export", logging.INFO, __file__, 1,
-                               "Processed %s rows\nfor café", (42,), None)
+    record = logging.LogRecord(
+        "feeds.export", logging.INFO, __file__, 1, "Processed %s rows\nfor café", (42,), None
+    )
     record.created = 0.123
 
     output = formatter.format(record)
@@ -25,15 +26,20 @@ def test_formats_record_as_one_json_line(formatter):
         "level": "INFO",
         "logger": "feeds.export",
         "service": "retail-media-feeds",
-        "banner": "example-banner",
-        "env": "production",
+        "environment": "production",
         "message": "Processed 42 rows\nfor café",
     }
 
 
 def test_includes_custom_extra_fields(formatter):
     record = logging.getLogger("feeds.export").makeRecord(
-        "feeds.export", logging.INFO, __file__, 1, "Processed feed", (), None,
+        "feeds.export",
+        logging.INFO,
+        __file__,
+        1,
+        "Processed feed",
+        (),
+        None,
         extra={"feed_id": "abc", "rows": 42, "metadata": {"region": "eu"}},
     )
 
@@ -44,7 +50,7 @@ def test_includes_custom_extra_fields(formatter):
     assert result["metadata"] == {"region": "eu"}
 
 
-@pytest.mark.parametrize("field", ["timestamp", "level", "logger", "service", "banner", "env"])
+@pytest.mark.parametrize("field", ["timestamp", "level", "logger", "service", "environment"])
 def test_extra_fields_cannot_override_core_fields(formatter, field):
     record = logging.LogRecord("feeds.export", logging.INFO, __file__, 1, "Processed", (), None)
     expected = json.loads(formatter.format(record))[field]
@@ -53,10 +59,12 @@ def test_extra_fields_cannot_override_core_fields(formatter, field):
     assert json.loads(formatter.format(record))[field] == expected
 
 
-@pytest.mark.parametrize("field", ["banner", "env"])
+@pytest.mark.parametrize("field", ["environment"])
 def test_optional_fields_default_to_null(field):
-    formatter = JsonFormatter("retail-media-feeds")
-    record = logging.LogRecord("feeds.export", logging.INFO, __file__, 1, "Processed", (), None)
+    formatter = JsonFormatter("generic-row-boats")
+    record = logging.LogRecord(
+        "rowboats.exporter", logging.INFO, __file__, 1, "Processed", (), None
+    )
 
     assert json.loads(formatter.format(record))[field] is None
 

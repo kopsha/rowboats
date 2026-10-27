@@ -2,10 +2,8 @@ from abc import abstractmethod
 from contextlib import AbstractContextManager
 from typing import ClassVar, Iterable, Iterator
 
-from settings import UseSettings
 
-
-class TableSource(UseSettings, AbstractContextManager):
+class TableSource(AbstractContextManager):
     """Yield rows with a stable, ordered schema within a context.
 
     Entry prepares the source; exit closes resources and preserves exceptions.
@@ -23,7 +21,7 @@ class TableSource(UseSettings, AbstractContextManager):
         pass
 
 
-class ChunkUploader(UseSettings, AbstractContextManager):
+class ChunkUploader(AbstractContextManager):
     """Upload chunks synchronously in order within a context.
 
     Entry prepares the upload; exit commits on success or cancels on failure.
