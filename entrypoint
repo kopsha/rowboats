@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+check_environment()
+{
+    REQUIRED=()
+
+    set +u  # temporary disable variable name check, to get propper error reports
+    for key in ${REQUIRED[@]}
+    do
+        if [[ -z ${!key} ]]; then
+            printf "ERROR: $key environment variable is required\n"
+            exit -1
+        fi
+    done
+    set -u  # re-enable variable name checks
+}
+
+wait_for()
+{
+    HOST=$1
+    PORT=$2
+    printf "\t..: Waiting for $HOST:$PORT\n"
+    while ! nc -z ${HOST} ${PORT}; do
+        sleep 0.1
+    done
+}
+
+main()
+{
+    case $1 in
+        shell)
+            cd src
+            bash
+            ;;
+
+        selfcheck)
+            shift
+            ruff check ./src
+
+            coverage run -m pytest \
+                -vvv \
+                --junitxml=/app/htmlcov/junit.xml \
+                $*
+
+            coverage html -d /app/htmlcov/html
+            coverage xml -o /app/htmlcov/coverage.xml
+
+            printf "total-coverage="
+            coverage report --format=total
+            ;;
+
+        tdd)
+            shift
+            find ./src -name "*.py" | entr -r pytest -vvv $*
+            ;;
+
+        pre-deploy)
+            check_environment
+            ;;
+
+        start)
+            check_environment
+            exec ./src/main.py
+            ;;
+
+        develop)
+            check_environment
+            ./src/main.py
+            ;;
+
+        *)
+            "$@"
+            ;;
+    esac
+}
+
+printf "\t..: Running $VERSION on $CONTEXT\n"
+
+main "$@"
+

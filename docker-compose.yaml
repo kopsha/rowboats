@@ -1,0 +1,21 @@
+services:
+    rowboat:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            args:
+                - CONTEXT=local
+                - VERSION=develop
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
+        restart: on_failure
+        command: develop
+        env_file:
+            - .env
+        environment:
+            - PYTHONDONTWRITEBYTECODE=1
+        volumes:
+            - ./src:/app/src
+            - ./htmlcov:/app/htmlcov
+            - ./zscaler-root.crt:/usr/local/share/ca-certificates/zscaler-root.crt
+
