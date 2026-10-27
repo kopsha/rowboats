@@ -14,6 +14,16 @@ Sources provide ordered column names and rows. Uploaders receive chunks in order
 and manage the upload lifecycle. These interfaces keep the export pipeline
 independent of any particular database or storage service.
 
-The first intended use case is exporting Databricks data to AWS S3 for retail
-media feeds. The streaming core is implemented; the Databricks and AWS adapters
-are still to be added.
+The runnable example reads a local CSV file and writes it to another file using
+only Python's standard library. The first row supplies the column names. The
+destination is replaced only after the export succeeds.
+
+```sh
+SOURCE_PATH=input.csv DESTINATION_PATH=output.csv python3 src/main.py
+```
+
+The input must contain a header, and the destination directory must already exist.
+CSV values are preserved, but quoting and line endings may be normalized.
+
+Databricks and AWS S3 adapters can later use the same interfaces without changing
+the streaming pipeline.

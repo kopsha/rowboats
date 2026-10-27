@@ -5,6 +5,7 @@ from logging import getLogger
 from os import environ
 
 import journal
+from local import CsvSource, FileUploader, LocalSettings
 from serializers import csv_serializer
 from streamers import chunk_streamer
 
@@ -12,13 +13,9 @@ from streamers import chunk_streamer
 def main():
     """Serialize source rows as CSV and send buffered chunks to the uploader."""
 
-    nucleus_config = DatabricksSettings.from_environment()
-    nucleus_client = DatabricksSource(nucleus_config)
+    settings = LocalSettings.from_environment()
 
-    aws_config = AwsSettings.from_environment()
-    s3_bucket = AwsStorage(aws_config)
-
-    with s3_bucket as dest, nucleus_client as source:
+    with FileUploader(settings) as dest, CsvSource(settings) as source:
         rows = chain((source.columns(),), source.rows())
         records = map(csv_serializer, rows)
         chunks = chunk_streamer(records, dest.UPLOAD_THRESHOLD)
@@ -32,7 +29,7 @@ if __name__ == "__main__":
     journal.configure(
         level=environ.get("LOG_LEVEL", "INFO"),
         environment=environ.get("CONTEXT"),
-        service="retail-media-feeds",
+        service="rowboats",
     )
 
     log = getLogger("main")
@@ -41,4 +38,4 @@ if __name__ == "__main__":
     main()
 
     took = perf_counter() - start
-    log.info("Instore feeds export completed in %.3fs", took)
+    log.info("CSV export completed in %.3fs", took)
