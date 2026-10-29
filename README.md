@@ -25,5 +25,22 @@ SOURCE_PATH=input.csv DESTINATION_PATH=output.csv python3 src/main.py
 The input must contain a header, and the destination directory must already exist.
 CSV values are preserved, but quoting and line endings may be normalized.
 
+To upload to FTP, select the FTP destination and provide connection credentials:
+
+```sh
+export SOURCE_PATH=input.csv DESTINATION_TYPE=ftp
+export FTP_HOST=ftp.example.com FTP_USER=exporter FTP_PASSWORD='your-password'
+export DESTINATION_PATH=/exports/output.csv
+python3 src/main.py
+```
+
+`FTP_PORT` defaults to `21` and `FTP_TIMEOUT` to `30` seconds. FTP uses passive
+mode and streams binary data over a single transfer. The remote directory must
+already exist. A temporary file in that directory is renamed to the destination
+after success; failed uploads attempt to delete the temporary file. Replacing an
+existing destination depends on the FTP server's rename support. Plain FTP sends
+credentials and data without encryption; this adapter does not support FTPS or SFTP.
+Omit `DESTINATION_TYPE` (or set it to `file`) for local output.
+
 Databricks and AWS S3 adapters can later use the same interfaces without changing
 the streaming pipeline.

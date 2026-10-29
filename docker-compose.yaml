@@ -17,5 +17,4 @@ services:
         volumes:
             - ./src:/app/src
             - ./htmlcov:/app/htmlcov
-            - ./zscaler-root.crt:/usr/local/share/ca-certificates/zscaler-root.crt
 

@@ -5,6 +5,7 @@ from logging import getLogger
 from os import environ
 
 import journal
+from ftp import FtpSettings, FtpUploader
 from local import CsvSource, FileUploader, LocalSettings
 from serializers import csv_serializer
 from streamers import chunk_streamer
@@ -13,9 +14,20 @@ from streamers import chunk_streamer
 def main():
     """Serialize source rows as CSV and send buffered chunks to the uploader."""
 
-    settings = LocalSettings.from_environment()
+    destination = environ.get("DESTINATION_TYPE", "file").lower()
+    if destination == "ftp":
+        LocalSettings.validate(environ)
+        settings = FtpSettings.from_environment()
+        uploader = FtpUploader(settings)
+        source_settings = LocalSettings.from_values(environ)
+    elif destination == "file":
+        settings = LocalSettings.from_environment()
+        uploader = FileUploader(settings)
+        source_settings = settings
+    else:
+        raise ValueError("DESTINATION_TYPE must be 'file' or 'ftp'")
 
-    with FileUploader(settings) as dest, CsvSource(settings) as source:
+    with uploader as dest, CsvSource(source_settings) as source:
         rows = chain((source.columns(),), source.rows())
         records = map(csv_serializer, rows)
         chunks = chunk_streamer(records, dest.UPLOAD_THRESHOLD)
