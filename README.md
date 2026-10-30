@@ -37,7 +37,7 @@ python3 src/main.py
 `FTP_PORT` defaults to `21` and `FTP_TIMEOUT` to `30` seconds. FTP uses passive
 mode and streams binary data over a single transfer. The remote directory must
 already exist. A temporary file in that directory is renamed to the destination
-after success; failed uploads attempt to delete the temporary file. Replacing an
+after success; unfinished uploads may leave temporary files. Replacing an
 existing destination depends on the FTP server's rename support. Plain FTP sends
 credentials and data without encryption; this adapter does not support FTPS or SFTP.
 Omit `DESTINATION_TYPE` (or set it to `file`) for local output.

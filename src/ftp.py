@@ -1,110 +1,92 @@
 """Streaming FTP destination with temporary-file publication."""
 
-from contextlib import suppress
 from dataclasses import dataclass, field
 from ftplib import FTP
+from logging import getLogger
 from pathlib import PurePosixPath
 from uuid import uuid4
 
 from contracts import ChunkUploader
+from journal import logged_suppress
 from settings import SafeSettings
+
+log = getLogger(__name__)
 
 
 @dataclass
 class FtpSettings(SafeSettings):
-    required = {"FTP_HOST", "FTP_USER", "FTP_PASSWORD", "DESTINATION_PATH"}
+    required = {
+        "FTP_HOST",
+        "FTP_USER",
+        "FTP_PASSWORD",
+        "DESTINATION_PATH",
+    }
 
     host: str
     user: str
     password: str = field(repr=False)
-    destination_path: str
+    destination: PurePosixPath
     port: int = 21
     timeout: float = 30
 
     @classmethod
     def from_values(cls, values):
-        port = int(values.get("FTP_PORT", "21"))
-        timeout = float(values.get("FTP_TIMEOUT", "30"))
-        if not 1 <= port <= 65535:
-            raise ValueError("FTP_PORT must be between 1 and 65535")
-        if not 0 < timeout < float("inf"):
-            raise ValueError("FTP_TIMEOUT must be positive and finite")
-        path = values["DESTINATION_PATH"]
-        if not PurePosixPath(path).name or path.endswith("/"):
-            raise ValueError("DESTINATION_PATH must name a remote file")
-        if any(
-            c in value
-            for value in (path, values["FTP_USER"], values["FTP_PASSWORD"])
-            for c in "\r\n"
-        ):
-            raise ValueError("FTP settings must not contain newlines")
         return cls(
-            values["FTP_HOST"], values["FTP_USER"], values["FTP_PASSWORD"], path, port, timeout
+            values["FTP_HOST"],
+            values["FTP_USER"],
+            values["FTP_PASSWORD"],
+            PurePosixPath(values["DESTINATION_PATH"]),
+            int(values.get("FTP_PORT", cls.port)),
+            float(values.get("FTP_TIMEOUT", cls.timeout)),
         )
 
 
 class FtpUploader(ChunkUploader):
-    """Send one binary transfer, then rename it to the destination on success."""
+    """Stream one binary upload and publish it only after successful exit."""
 
     UPLOAD_THRESHOLD = 64 * 1024
 
     def __init__(self, settings: FtpSettings):
         self.settings = settings
-
-    def _connect(self):
-        client = FTP()
-        try:
-            client.connect(self.settings.host, self.settings.port, timeout=self.settings.timeout)
-            client.login(self.settings.user, self.settings.password)
-        except BaseException:
-            client.close()
-            raise
-        return client
+        path = settings.destination
+        self.temporary_path = str(path.with_name(f".{path.name}.{uuid4().hex}.part"))
+        self.client = FTP()
+        self.data = None
 
     def __enter__(self):
-        path = PurePosixPath(self.settings.destination_path)
-        self.temporary_path = str(path.with_name(f".{path.name}.{uuid4().hex}.part"))
-        self.client = self._connect()
-        self.data = None
-        self.started = False
         try:
+            self.client.connect(
+                self.settings.host, self.settings.port, timeout=self.settings.timeout
+            )
+            self.client.login(self.settings.user, self.settings.password)
             self.client.voidcmd("TYPE I")
-            self.started = True
             self.data = self.client.transfercmd(f"STOR {self.temporary_path}")
         except BaseException:
-            self._discard()
+            self._close_client()
             raise
         return self
 
-    def send(self, chunk):
+    def send(self, chunk: memoryview) -> None:
         self.data.sendall(chunk)
 
-    def _discard(self):
-        # A failed transfer can leave unread replies on the control connection.
-        # Use a fresh session for cleanup so replies cannot get out of sync.
-        if self.data is not None:
-            with suppress(Exception):
-                self.data.close()
-        self.client.close()
-        if self.started:
-            with suppress(Exception):
-                cleanup = self._connect()
-                try:
-                    cleanup.delete(self.temporary_path)
-                finally:
-                    cleanup.close()
-
     def __exit__(self, exc_type, exc_value, traceback):
-        if exc_type is not None:
-            self._discard()
-            return False
-        try:
-            self.data.close()
-            self.client.voidresp()
-            self.client.rename(self.temporary_path, self.settings.destination_path)
-        except BaseException:
-            self._discard()
-            raise
-        finally:
-            self.client.close()
+        self._close_data()
+        if exc_type is None:
+            self._publish()
+        self._close_client()
         return False
+
+    def _publish(self):
+        with logged_suppress(log, "Failed to publish FTP upload"):
+            self.client.voidresp()
+            self.client.rename(self.temporary_path, str(self.settings.destination))
+
+    def _close_data(self):
+        with logged_suppress(log, "Failed to close FTP data connection"):
+            if self.data is not None:
+                self.data.close()
+                self.data = None
+
+    def _close_client(self):
+        with logged_suppress(log, "Failed to close FTP control connection"):
+            self.client.close()

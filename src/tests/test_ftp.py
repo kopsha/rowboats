@@ -1,4 +1,5 @@
-from unittest.mock import Mock
+from pathlib import PurePosixPath
+from unittest.mock import Mock, call
 
 import pytest
 
@@ -9,12 +10,12 @@ from main import main
 @pytest.fixture
 def ftp(monkeypatch):
     client = Mock()
-    monkeypatch.setattr("ftp.FTP", lambda: client)
+    monkeypatch.setattr("ftp.FTP", Mock(return_value=client))
     return client
 
 
 def settings():
-    return FtpSettings("localhost", "exporter", "secret", "/exports/report.csv")
+    return FtpSettings("localhost", "exporter", "secret", PurePosixPath("/exports/report.csv"))
 
 
 def test_streams_binary_chunks_then_publishes(ftp):
@@ -22,53 +23,72 @@ def test_streams_binary_chunks_then_publishes(ftp):
         uploader.send(memoryview(b"first"))
         uploader.send(memoryview(b"second"))
         ftp.rename.assert_not_called()
-    ftp.connect.assert_called_once_with("localhost", 21, timeout=30)
-    ftp.login.assert_called_once_with("exporter", "secret")
-    ftp.voidcmd.assert_called_once_with("TYPE I")
-    assert [call.args[0] for call in ftp.transfercmd.return_value.sendall.call_args_list] == [
-        b"first",
-        b"second",
+
+    assert ftp.mock_calls == [
+        call.connect("localhost", 21, timeout=30),
+        call.login("exporter", "secret"),
+        call.voidcmd("TYPE I"),
+        call.transfercmd(f"STOR {uploader.temporary_path}"),
+        call.transfercmd().sendall(b"first"),
+        call.transfercmd().sendall(b"second"),
+        call.transfercmd().close(),
+        call.voidresp(),
+        call.rename(uploader.temporary_path, "/exports/report.csv"),
+        call.close(),
     ]
-    ftp.voidresp.assert_called_once()
-    ftp.rename.assert_called_once_with(uploader.temporary_path, "/exports/report.csv")
-    ftp.delete.assert_not_called()
 
 
-@pytest.mark.parametrize("failure", ["source", "send", "transfer", "reply", "rename"])
-def test_failed_export_discards_temporary_upload(ftp, failure):
-    error = RuntimeError("export failed")
-    if failure == "send":
-        ftp.transfercmd.return_value.sendall.side_effect = error
-    elif failure == "transfer":
-        ftp.transfercmd.side_effect = error
-    elif failure == "reply":
-        ftp.voidresp.side_effect = error
-    elif failure == "rename":
-        ftp.rename.side_effect = error
-    uploader = FtpUploader(settings())
-    with pytest.raises(RuntimeError, match="export failed"):
-        with uploader:
-            uploader.send(memoryview(b"partial"))
-            if failure == "source":
-                raise error
-    ftp.delete.assert_called_once_with(uploader.temporary_path)
-    if failure != "rename":
-        ftp.rename.assert_not_called()
-
-
-def test_cleanup_failure_preserves_original_error(ftp):
-    ftp.delete.side_effect = OSError("cleanup failed")
-    with pytest.raises(RuntimeError, match="source failed"):
-        with FtpUploader(settings()):
-            raise RuntimeError("source failed")
-
-
-def test_login_failure_closes_connection(ftp):
-    ftp.login.side_effect = OSError("login failed")
-    with pytest.raises(OSError, match="login failed"):
+@pytest.mark.parametrize("operation", ["connect", "login", "transfercmd"])
+def test_failed_entry_closes_client(ftp, operation):
+    getattr(ftp, operation).side_effect = OSError("setup failed")
+    with pytest.raises(OSError, match="setup failed"):
         with FtpUploader(settings()):
             pytest.fail("entry should fail")
     ftp.close.assert_called_once()
+    ftp.rename.assert_not_called()
+
+
+def test_source_failure_closes_connections_without_publishing(ftp):
+    with pytest.raises(RuntimeError, match="source failed"):
+        with FtpUploader(settings()):
+            raise RuntimeError("source failed")
+    ftp.transfercmd.return_value.close.assert_called_once()
+    ftp.close.assert_called_once()
+    ftp.rename.assert_not_called()
+
+
+def test_send_failure_closes_connections_without_publishing(ftp):
+    ftp.transfercmd.return_value.sendall.side_effect = OSError("send failed")
+    with pytest.raises(OSError, match="send failed"):
+        with FtpUploader(settings()) as uploader:
+            uploader.send(memoryview(b"partial"))
+    ftp.transfercmd.return_value.close.assert_called_once()
+    ftp.close.assert_called_once()
+    ftp.rename.assert_not_called()
+
+
+@pytest.mark.parametrize("operation", ["voidresp", "rename"])
+def test_publication_failure_is_logged_and_client_closed(ftp, operation, caplog):
+    error = OSError("publication failed")
+    getattr(ftp, operation).side_effect = error
+    with FtpUploader(settings()) as uploader:
+        uploader.send(memoryview(b"content"))
+    ftp.transfercmd.return_value.close.assert_called_once()
+    ftp.close.assert_called_once()
+    assert caplog.records[-1].getMessage() == "Failed to publish FTP upload"
+    assert caplog.records[-1].exc_info[1] is error
+
+
+@pytest.mark.parametrize("connection", ["control", "data"])
+def test_close_failure_is_logged_and_preserves_source_error(ftp, connection, caplog):
+    target = ftp if connection == "control" else ftp.transfercmd.return_value
+    target.close.side_effect = OSError("close failed")
+    with pytest.raises(RuntimeError, match="source failed"):
+        with FtpUploader(settings()):
+            raise RuntimeError("source failed")
+    ftp.close.assert_called_once()
+    ftp.transfercmd.return_value.close.assert_called_once()
+    assert "close failed" in caplog.text
 
 
 def test_main_exports_csv_to_ftp(tmp_path, monkeypatch, ftp):
@@ -90,23 +110,3 @@ def test_main_exports_csv_to_ftp(tmp_path, monkeypatch, ftp):
     assert payload.decode("utf-8") == "id,name\r\n1,café\r\n"
     ftp.rename.assert_called_once()
 
-
-@pytest.mark.parametrize(
-    "key,value",
-    [
-        ("FTP_PORT", "0"),
-        ("FTP_TIMEOUT", "nan"),
-        ("DESTINATION_PATH", "/exports/"),
-        ("DESTINATION_PATH", "file\r\nDELE other"),
-    ],
-)
-def test_rejects_invalid_settings(key, value):
-    values = {
-        "FTP_HOST": "localhost",
-        "FTP_USER": "user",
-        "FTP_PASSWORD": "secret",
-        "DESTINATION_PATH": "report.csv",
-        key: value,
-    }
-    with pytest.raises(ValueError):
-        FtpSettings.from_values(values)

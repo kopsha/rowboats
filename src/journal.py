@@ -3,9 +3,19 @@
 import json
 import logging
 import sys
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 _STANDARD_FIELDS = set(logging.makeLogRecord({}).__dict__)
+
+
+@contextmanager
+def logged_suppress(logger, message):
+    """Log and suppress ordinary exceptions, including their traceback."""
+    try:
+        yield
+    except Exception:
+        logger.exception(message)
 
 
 class JsonFormatter(logging.Formatter):

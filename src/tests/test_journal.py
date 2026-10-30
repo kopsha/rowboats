@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from journal import JsonFormatter
+from journal import JsonFormatter, logged_suppress
 
 
 @pytest.fixture
@@ -84,3 +84,19 @@ def test_includes_exception_traceback(formatter):
     assert result["message"] == "Export failed"
     assert result["exception"].startswith("Traceback (most recent call last):\n")
     assert result["exception"].endswith("ValueError: Invalid feed")
+
+
+def test_logged_suppress_reports_exception_and_traceback(caplog):
+    error = OSError("connection failed")
+    with logged_suppress(logging.getLogger("test"), "Closing failed"):
+        raise error
+    record = caplog.records[-1]
+    assert record.getMessage() == "Closing failed"
+    assert record.exc_info[1] is error
+    assert record.exc_info[2] is not None
+
+
+def test_logged_suppress_preserves_interrupts():
+    with pytest.raises(KeyboardInterrupt):
+        with logged_suppress(logging.getLogger("test"), "Closing failed"):
+            raise KeyboardInterrupt
