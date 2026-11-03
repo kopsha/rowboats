@@ -70,16 +70,17 @@ class FtpUploader(ChunkUploader):
         self.data.sendall(chunk)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self._close_data()
-        if exc_type is None:
-            self._publish()
-        self._close_client()
+        try:
+            self._close_data()
+            if exc_type is None:
+                self._publish()
+        finally:
+            self._close_client()
         return False
 
     def _publish(self):
-        with logged_suppress(log, "Failed to publish FTP upload"):
-            self.client.voidresp()
-            self.client.rename(self.temporary_path, str(self.settings.destination))
+        self.client.voidresp()
+        self.client.rename(self.temporary_path, str(self.settings.destination))
 
     def _close_data(self):
         with logged_suppress(log, "Failed to close FTP data connection"):

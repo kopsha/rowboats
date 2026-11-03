@@ -68,15 +68,15 @@ def test_send_failure_closes_connections_without_publishing(ftp):
 
 
 @pytest.mark.parametrize("operation", ["voidresp", "rename"])
-def test_publication_failure_is_logged_and_client_closed(ftp, operation, caplog):
+def test_publication_failure_propagates_and_connections_are_closed(ftp, operation):
     error = OSError("publication failed")
     getattr(ftp, operation).side_effect = error
-    with FtpUploader(settings()) as uploader:
-        uploader.send(memoryview(b"content"))
+    with pytest.raises(OSError) as raised:
+        with FtpUploader(settings()) as uploader:
+            uploader.send(memoryview(b"content"))
     ftp.transfercmd.return_value.close.assert_called_once()
     ftp.close.assert_called_once()
-    assert caplog.records[-1].getMessage() == "Failed to publish FTP upload"
-    assert caplog.records[-1].exc_info[1] is error
+    assert raised.value is error
 
 
 @pytest.mark.parametrize("connection", ["control", "data"])
