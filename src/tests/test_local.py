@@ -2,7 +2,7 @@ import csv
 
 import pytest
 
-from local import FileUploader, LocalSettings
+from local import LocalFileSink, LocalSettings
 from main import main
 
 
@@ -44,7 +44,7 @@ def test_failed_upload_discards_partial_file(tmp_path):
     settings = LocalSettings(tmp_path / "input.csv", destination)
 
     with pytest.raises(RuntimeError, match="export failed"):
-        with FileUploader(settings) as uploader:
+        with LocalFileSink(settings) as uploader:
             uploader.send(memoryview(b"partial"))
             raise RuntimeError("export failed")
 

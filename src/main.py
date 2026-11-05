@@ -7,7 +7,7 @@ from os import environ
 import journal
 from csv_source import CsvSource
 from ftp import FtpSettings, FtpUploader
-from local import FileUploader, LocalSettings
+from local import LocalFileSink, LocalSettings
 from serializers import csv_serializer
 from streamers import chunk_streamer
 
@@ -23,7 +23,7 @@ def main():
         source_settings = LocalSettings.from_values(environ)
     elif destination == "file":
         settings = LocalSettings.from_environment()
-        uploader = FileUploader(settings)
+        uploader = LocalFileSink(settings)
         source_settings = settings
     else:
         raise ValueError("DESTINATION_TYPE must be 'file' or 'ftp'")

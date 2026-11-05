@@ -20,7 +20,7 @@ class LocalSettings(SafeSettings):
         return cls(Path(values["SOURCE_PATH"]), Path(values["DESTINATION_PATH"]))
 
 
-class FileUploader(ChunkUploader):
+class LocalFileSink(ChunkUploader):
     """Replace the destination only after the entire export succeeds."""
 
     UPLOAD_THRESHOLD = 64 * 1024
