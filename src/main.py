@@ -5,8 +5,9 @@ from logging import getLogger
 from os import environ
 
 import journal
+from csv_source import CsvSource
 from ftp import FtpSettings, FtpUploader
-from local import CsvSource, FileUploader, LocalSettings
+from local import FileUploader, LocalSettings
 from serializers import csv_serializer
 from streamers import chunk_streamer
 
