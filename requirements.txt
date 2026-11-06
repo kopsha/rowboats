@@ -4,22 +4,38 @@
 #
 #    pip-compile requirements.in
 #
+bcrypt==5.0.0
+    # via paramiko
 certifi==2026.6.17
     # via requests
+cffi==2.1.1
+    # via
+    #   cryptography
+    #   pynacl
 charset-normalizer==3.4.7
     # via requests
 coverage==7.14.3
     # via -r requirements.in
+cryptography==50.0.2
+    # via paramiko
 idna==3.18
     # via requests
 iniconfig==2.3.0
     # via pytest
+invoke==3.0.3
+    # via paramiko
 packaging==26.2
     # via pytest
+paramiko==5.1.0
+    # via -r requirements.in
 pluggy==1.6.0
     # via pytest
+pycparser==3.12
+    # via cffi
 pygments==2.20.0
     # via pytest
+pynacl==1.6.2
+    # via paramiko
 pytest==9.1.1
     # via -r requirements.in
 requests==2.34.2
