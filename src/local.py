@@ -1,11 +1,14 @@
 """Local settings and file destination using only the standard library."""
 
 from dataclasses import dataclass
+from logging import getLogger
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from contracts import ChunkUploader
 from settings import SafeSettings
+
+log = getLogger(__name__)
 
 
 @dataclass
@@ -34,6 +37,7 @@ class LocalFileSink(ChunkUploader):
             mode="wb", dir=self.settings.destination_path.parent, delete=False
         )
         self.temporary_path = Path(self.stream.name)
+        log.debug("Writing export to temporary file %s", self.temporary_path)
         return self
 
     def send(self, chunk):
@@ -44,6 +48,20 @@ class LocalFileSink(ChunkUploader):
             self.stream.close()
             if exc_type is None:
                 self.temporary_path.replace(self.settings.destination_path)
+                log.info("Export saved to %s", self.settings.destination_path)
+            else:
+                log.warning(
+                    "Export failed; discarding temporary file %s",
+                    self.temporary_path,
+                    exc_info=(exc_type, exc_value, traceback),
+                )
+        except Exception:
+            log.exception("Failed to save export to %s", self.settings.destination_path)
+            raise
         finally:
-            self.temporary_path.unlink(missing_ok=True)
+            try:
+                self.temporary_path.unlink(missing_ok=True)
+            except Exception:
+                log.exception("Failed to remove temporary file %s", self.temporary_path)
+                raise
         return False
