@@ -9,6 +9,7 @@ from csv_source import CsvSource
 from ftp import FtpSettings, FtpUploader
 from local import LocalFileSink, LocalSettings
 from serializers import csv_serializer
+from sftp import SftpSettings, SftpUploader
 from streamers import chunk_streamer
 
 
@@ -21,12 +22,17 @@ def main():
         settings = FtpSettings.from_environment()
         uploader = FtpUploader(settings)
         source_settings = LocalSettings.from_values(environ)
+    elif destination == "sftp":
+        LocalSettings.validate(environ)
+        settings = SftpSettings.from_environment()
+        uploader = SftpUploader(settings)
+        source_settings = LocalSettings.from_values(environ)
     elif destination == "file":
         settings = LocalSettings.from_environment()
         uploader = LocalFileSink(settings)
         source_settings = settings
     else:
-        raise ValueError("DESTINATION_TYPE must be 'file' or 'ftp'")
+        raise ValueError("DESTINATION_TYPE must be 'file', 'ftp', or 'sftp'")
 
     with uploader as dest, CsvSource(source_settings) as source:
         rows = chain((source.columns(),), source.rows())

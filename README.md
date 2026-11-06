@@ -42,9 +42,8 @@ existing destination depends on the FTP server's rename support. Plain FTP sends
 credentials and data without encryption; this adapter does not support FTPS or SFTP.
 Omit `DESTINATION_TYPE` (or set it to `file`) for local output.
 
-SFTP support is planned; the adapter and `DESTINATION_TYPE=sftp` selection are
-not implemented yet. Paramiko is included in the dependencies in preparation.
-The planned configuration is:
+To upload over SFTP, install the requirements (including Paramiko) and configure
+the environment before running `python3 src/main.py`:
 
 ```text
 SOURCE_PATH=input.csv
@@ -58,16 +57,17 @@ SFTP_PORT=22
 SFTP_TIMEOUT=30
 ```
 
-Authentication will use `SFTP_PASSWORD` or `SFTP_KEY_FILENAME`. The known-hosts
-file must contain the server's trusted host key; unknown or mismatched keys will
-be rejected. In containers, mount the key and known-hosts files at the configured
+Authentication uses `SFTP_PASSWORD` or `SFTP_KEY_FILENAME`. The known-hosts
+file must contain the server's trusted host key; unknown or mismatched keys are
+rejected. In containers, mount the key and known-hosts files at the configured
 paths.
 
-The planned adapter will stream to a unique temporary file in the destination
-directory, close it, and publish it with `posix_rename()` after a successful
+The adapter streams to a unique temporary file in the destination
+directory, closes it, and publishes it with `posix_rename()` after a successful
 export. The remote directory must already exist, and the server must support
-the OpenSSH POSIX rename extension to replace an existing destination. Failed
-uploads will attempt to remove the temporary file; connection failures may leave
+the OpenSSH POSIX rename extension for publication, including replacement of an
+existing destination. There is no fallback that deletes the existing destination. Failed
+uploads attempt to remove the temporary file; connection failures may leave
 it behind. See Paramiko's [SSH client documentation](https://docs.paramiko.org/en/stable/api/client.html)
 and [SFTP documentation](https://docs.paramiko.org/en/stable/api/sftp.html).
 
